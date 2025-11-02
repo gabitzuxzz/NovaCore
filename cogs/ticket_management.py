@@ -21,12 +21,15 @@ class TicketModal(ui.Modal):
         )
         self.add_item(self.subject)
         
+        order_id_required = ticket_type != "Others"
+        order_id_label = "Order ID" if order_id_required else "Order ID (optional)"
+        
         self.order_id = ui.TextInput(
-            label="Order ID (optional for Others type)",
+            label=order_id_label,
             placeholder="NC-YYYYMMDD-XXXXXX",
-            min_length=0,
+            min_length=0 if not order_id_required else 5,
             max_length=20,
-            required=False
+            required=order_id_required
         )
         self.add_item(self.order_id)
         
@@ -122,7 +125,7 @@ class TicketControlView(ui.View):
         staff_role_ids = set(map(int, os.getenv('STAFF_ROLE_IDS').split(',')))
         is_staff = any(role.id in staff_role_ids for role in interaction.user.roles)
         
-        if not is_staff and interaction.channel.permissions_for(interaction.user).manage_channels:
+        if not is_staff:
             await interaction.response.send_message("❌ Only staff members can close tickets.", ephemeral=True)
             return
         

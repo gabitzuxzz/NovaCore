@@ -7,6 +7,14 @@ NovaCore is a semi-automated Discord bot for managing a digital product shop. It
 ## Recent Changes
 
 **November 2, 2025:**
+- **Added Support Ticket System**: Implemented a comprehensive ticket management system with three ticket types (Product Issue, Refund Request, Others). The system includes:
+  - Persistent ticket panel with interactive buttons in a designated channel
+  - Modal forms for ticket creation with subject, order ID, and description fields
+  - Automatic order validation: when an Order ID is provided, the bot fetches and displays order details in the ticket
+  - Private ticket channels created with proper permissions (user + staff only)
+  - Staff-only ticket closure with permission validation
+  - Order ID required for Product Issue and Refund Request tickets, optional for Others
+  - Automatic cleanup of old ticket panels on bot restart
 - Separated vouch and purchase notification channels: `VOUCH_CHANNEL_ID` for customer reviews/vouches, `PUBLIC_LOG_CHANNEL_ID` for purchase notifications
 - Added `/details {orderID}` command for staff to view detailed order information including status, payment proof, and timestamps
 - Fixed product image URL validation to prevent invalid thumbnail URLs in product embeds
@@ -35,6 +43,9 @@ Preferred communication style: Simple, everyday language.
   - `StockView`: Main product catalog interface
   - `CategorySelect`: Category browsing dropdown
   - `PaymentMethodView`: Payment selection (PayPal/Crypto)
+  - `TicketPanelView`: Support ticket system with three button types
+  - `TicketModal`: Dynamic form for ticket creation with conditional Order ID validation
+  - `TicketControlView`: Staff controls for ticket management (close button)
   - Product selection and checkout flows
 - **Rationale**: Discord's native UI components provide interactive experiences without external web interfaces, keeping everything in-platform.
 
@@ -81,7 +92,8 @@ Preferred communication style: Simple, everyday language.
 - **Validation**: Startup validation ensures all required variables are present
 - **Required Variables**: 
   - Discord credentials: `DISCORD_TOKEN`
-  - Channel IDs: `MAIN_CHANNEL_ID`, `STAFF_CHANNEL_ID`, `PUBLIC_LOG_CHANNEL_ID` (for purchase logs), `VOUCH_CHANNEL_ID` (for customer reviews)
+  - Channel IDs: `MAIN_CHANNEL_ID`, `STAFF_CHANNEL_ID`, `PUBLIC_LOG_CHANNEL_ID` (for purchase logs), `VOUCH_CHANNEL_ID` (for customer reviews), `TICKET_PANEL_CHANNEL_ID` (for support ticket panel)
+  - Category IDs: `TICKET_CATEGORY_ID` (where ticket channels are created)
   - Role IDs: `CUSTOMER_ROLE_ID`, `STAFF_ROLE_IDS`, `OWNER_ROLE_ID`
   - Payment addresses: `PAYPAL_EMAIL`, `BTC_ADDRESS`, `LTC_ADDRESS`, `USDT_ADDRESS`, `SOL_ADDRESS`, `ETH_ADDRESS`
   - Storage: `DATABASE_PATH`, `LOG_DIR`
@@ -89,11 +101,28 @@ Preferred communication style: Simple, everyday language.
 
 ### File Organization
 - **Structure**:
-  - `/cogs`: Feature modules (product_management, order_management)
+  - `/cogs`: Feature modules (product_management, order_management, payments_management, ticket_management)
   - `/database`: Data layer with DatabaseManager abstraction
   - `/ui`: Discord UI components and views
   - `/utils`: Helper functions, validators, migration scripts
 - **Rationale**: Modular organization supports maintainability and allows independent development of features.
+
+### Support Ticket System
+- **Architecture**: Cog-based ticket management with persistent UI components
+- **Ticket Types**: 
+  - Product Issue (requires Order ID)
+  - Refund Request (requires Order ID)
+  - Others (Order ID optional)
+- **Workflow**:
+  1. User clicks ticket type button on persistent panel
+  2. Modal form opens with subject, order ID, and description fields
+  3. System validates Order ID (if provided) and fetches order details from database
+  4. Private ticket channel created in configured category with proper permissions
+  5. Ticket embed displays all information including order status, product, and payment details
+  6. Staff can close tickets using dedicated button (permission-protected)
+- **Security**: Role-based access control ensures only staff members can close tickets
+- **Order Integration**: Automatic lookup and display of order information when Order ID is provided, showing status, product, total, payment method, and order date
+- **Rationale**: In-Discord ticket system provides seamless support experience without external tools, with automatic order context retrieval for faster issue resolution.
 
 ## External Dependencies
 
