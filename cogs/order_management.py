@@ -7,6 +7,7 @@ import random
 import string
 from typing import Optional
 from database.db_manager import DatabaseManager
+from utils.deliverables_helper import format_deliverables
 
 class OrderManagement(commands.Cog):
     def __init__(self, bot):
@@ -205,17 +206,11 @@ class ReviewView(discord.ui.View):
                     color=0x8b5cf6
                 )
                 
-                deliverables_str = self.product.get('deliverables', 'Digital product')
-                if deliverables_str:
-                    deliverables = deliverables_str.split(',')
-                    formatted_deliverables = "\n".join(
-                        f"• {d.strip()}" for d in deliverables
-                    )
-                else:
-                    formatted_deliverables = "• Digital product delivery"
+                deliverables_str = self.product.get('deliverables', '')
+                formatted_deliverables = format_deliverables(deliverables_str)
                 
                 embed.add_field(
-                    name="Your Products",
+                    name="📦 Your Products",
                     value=formatted_deliverables,
                     inline=False
                 )
