@@ -8,6 +8,24 @@ from discord.ext import commands
 from pathlib import Path
 from ui.components import StockView
 
+# ------------------- Tiny Flask webserver pentru Render -------------------
+from flask import Flask
+from threading import Thread
+
+app = Flask("healthcheck")
+
+@app.route("/")
+def home():
+    return "I'm alive"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+# Pornește Flask în fundal înainte de bot
+Thread(target=run_flask).start()
+# -------------------------------------------------------------------------
+
 # Logging simplificat, compatibil cu Render
 logging.basicConfig(
     level=logging.INFO,
