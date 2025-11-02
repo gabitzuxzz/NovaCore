@@ -199,6 +199,7 @@ class TicketManagement(commands.Cog):
                            "🎀 Thank you for choosing NovaCore Premium!",
                 color=0x5865F2
             )
+            embed.set_thumbnail(url="https://i.imgur.com/gGCBKGe.png")
             embed.set_footer(text="© NovaCore • Premium Support")
             
             view = TicketPanelView(self.bot)
