@@ -75,7 +75,8 @@ class ProductManagement(commands.Cog):
                 description=f"**{product}** has been added to the store!",
                 color=0x00ff00
             )
-            embed.set_thumbnail(url=image_url)
+            if image_url and image_url.startswith(('http://', 'https://')):
+                embed.set_thumbnail(url=image_url)
             embed.add_field(name="📁 Category", value=f"`{category.title()}`", inline=True)
             embed.add_field(name="💰 Price", value=f"**€{price:.2f}**", inline=True)
             embed.add_field(name="📦 Stock", value=f"`{stock}` units", inline=True)
