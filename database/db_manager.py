@@ -295,3 +295,40 @@ class DatabaseManager:
             best_sellers = [dict(row) for row in cursor]
             
             return summary, best_sellers
+    async def get_pending_order(self, user_id: str) -> Optional[Dict]:
+        """Get pending order for a user"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT * FROM orders 
+                WHERE user_id = ? AND status = 'pending_proof'
+                ORDER BY created_at DESC
+                LIMIT 1
+            ''', (user_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+    
+    async def get_product(self, product_id: int) -> Optional[Dict]:
+        """Get a product by ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT * FROM products WHERE id = ?
+            ''', (product_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+    
+    async def update_order_proof(self, order_id: str, proof_url: str) -> bool:
+        """Update order with payment proof"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    UPDATE orders 
+                    SET proof_image = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE order_id = ?
+                ''', (proof_url, order_id))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error updating order proof: {str(e)}")
+            return False

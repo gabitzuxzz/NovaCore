@@ -162,7 +162,7 @@ class PaymentMethodView(ui.View):
                 **Important:**
                 • Send as Friends & Family
                 • Include Order ID (**{order_id}**) in the payment notes
-                • After payment, contact staff with proof
+                • After payment, send proof of payment so our staff can review your order
                 """,
                 inline=False
             )
@@ -182,12 +182,12 @@ class PaymentMethodView(ui.View):
                 
                 **Important:**
                 • Include Order ID (**{order_id}**) in transaction notes if possible
-                • After payment, contact staff with proof
+                • After payment, send proof of payment so our staff can review your order
                 """,
                 inline=False
             )
         
-        embed.set_footer(text="Contact staff after payment for order completion")
+        embed.set_footer(text="Send proof of payment so our staff can review your order")
         embed.timestamp = discord.utils.utcnow()
         
         try:
