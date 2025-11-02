@@ -73,17 +73,24 @@ class TicketModal(ui.Modal):
             overwrites=overwrites
         )
         
-        embed = discord.Embed(
+        # Ticket Details Embed
+        ticket_embed = discord.Embed(
             title=f"🎫 Ticket #{ticket_number:04d} - {self.ticket_type}",
             description=f"**Subject:** {self.subject.value}\n\n**Description:**\n{self.description.value}",
             color=0x8b5cf6,
             timestamp=datetime.now()
         )
         
-        embed.add_field(name="Created by", value=interaction.user.mention, inline=True)
-        embed.add_field(name="Type", value=self.ticket_type, inline=True)
+        ticket_embed.add_field(name="Created by", value=interaction.user.mention, inline=True)
+        ticket_embed.add_field(name="Type", value=self.ticket_type, inline=True)
+        ticket_embed.set_footer(text="A staff member will assist you shortly. • © NovaCore")
         
-        if self.order_id.value:
+        # Send ticket details
+        view = TicketControlView()
+        await ticket_channel.send(f"{interaction.user.mention}", embed=ticket_embed, view=view)
+        
+        # Product/Order Details Embed (for Product Issue and Refund Request)
+        if self.order_id.value and self.ticket_type in ["Product Issue", "Refund Request"]:
             db = DatabaseManager(os.getenv('DATABASE_PATH'))
             order = await db.get_order_by_id(self.order_id.value)
             
@@ -96,22 +103,37 @@ class TicketModal(ui.Modal):
                     'completed': '✅'
                 }.get(order['status'], '❓')
                 
-                embed.add_field(name="Order ID", value=f"`{self.order_id.value}`", inline=False)
-                embed.add_field(name="Order Status", value=f"{status_emoji} {order['status'].title()}", inline=True)
+                order_embed = discord.Embed(
+                    title="📦 Order Details",
+                    color=0x3b82f6,
+                    timestamp=datetime.now()
+                )
+                
+                order_embed.add_field(name="Order ID", value=f"`{self.order_id.value}`", inline=False)
+                order_embed.add_field(name="Status", value=f"{status_emoji} {order['status'].title()}", inline=True)
+                
                 if product:
-                    embed.add_field(name="Product", value=product['name'], inline=True)
-                embed.add_field(name="Total", value=f"€{order['total_price']:.2f}", inline=True)
-                embed.add_field(name="Payment Method", value=order['payment_method'].upper(), inline=True)
+                    order_embed.add_field(name="Product", value=product['name'], inline=True)
+                    order_embed.add_field(name="Category", value=product['category'], inline=True)
+                    order_embed.add_field(name="Price", value=f"€{product['price']:.2f}", inline=True)
+                
+                order_embed.add_field(name="Quantity", value=str(order['quantity']), inline=True)
+                order_embed.add_field(name="Total", value=f"€{order['total_price']:.2f}", inline=True)
+                order_embed.add_field(name="Payment Method", value=order['payment_method'].upper(), inline=True)
                 
                 order_date = datetime.fromisoformat(order['created_at'])
-                embed.add_field(name="Order Date", value=order_date.strftime("%Y-%m-%d %H:%M"), inline=True)
+                order_embed.add_field(name="Order Date", value=order_date.strftime("%Y-%m-%d %H:%M"), inline=True)
+                
+                order_embed.set_footer(text="© NovaCore")
+                
+                await ticket_channel.send(embed=order_embed)
             else:
-                embed.add_field(name="Order ID", value=f"`{self.order_id.value}` ❌ Not Found", inline=False)
-        
-        embed.set_footer(text="A staff member will assist you shortly. • © NovaCore")
-        
-        view = TicketControlView()
-        await ticket_channel.send(f"{interaction.user.mention}", embed=embed, view=view)
+                error_embed = discord.Embed(
+                    title="⚠️ Order Not Found",
+                    description=f"Order ID `{self.order_id.value}` was not found in our system.",
+                    color=0xef4444
+                )
+                await ticket_channel.send(embed=error_embed)
         
         await interaction.followup.send(f"✅ Ticket created: {ticket_channel.mention}", ephemeral=True)
 
