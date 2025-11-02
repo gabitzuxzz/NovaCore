@@ -6,7 +6,7 @@ from datetime import datetime
 import random
 import string
 from typing import Optional
-from novacore_bot.database.db_manager import DatabaseManager
+from database.db_manager import DatabaseManager
 
 class OrderManagement(commands.Cog):
     def __init__(self, bot):
@@ -39,7 +39,6 @@ class OrderManagement(commands.Cog):
         embed.add_field(name="Quantity", value=str(order['quantity']), inline=True)
         embed.add_field(name="Total", value=f"€{total:.2f}", inline=True)
         
-        # Payment instructions
         if order['payment_method'] == 'paypal':
             embed.add_field(
                 name="Payment Instructions",
@@ -53,7 +52,7 @@ class OrderManagement(commands.Cog):
                 """,
                 inline=False
             )
-        else:  # Crypto
+        else:
             address_var = f"{order['payment_method'].upper()}_ADDRESS"
             address = os.getenv(address_var)
             
@@ -102,7 +101,7 @@ class OrderManagement(commands.Cog):
         if proof_url:
             embed.set_image(url=proof_url)
             
-        view = ReviewView(self.bot, order['order_id'], product, user.id)
+        view = ReviewView(self.bot, order['order_id'], product, user.id, order['quantity'], self._staff_role_ids)
         await staff_channel.send(embed=embed, view=view)
 
     @commands.Cog.listener()
@@ -111,15 +110,26 @@ class OrderManagement(commands.Cog):
         if message.author.bot or not isinstance(message.channel, discord.DMChannel):
             return
             
-        # Check if user has pending order
         order = await self.db.get_pending_order(str(message.author.id))
         if not order:
             return
             
-        # Check for image attachment
-        if not message.attachments or not any(
-            att.content_type.startswith('image/') for att in message.attachments
-        ):
+        if not message.attachments:
+            await message.channel.send(
+                "Please upload an image as payment proof."
+            )
+            return
+        
+        is_image = False
+        for att in message.attachments:
+            if att.content_type and att.content_type.startswith('image/'):
+                is_image = True
+                break
+            elif att.filename and att.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                is_image = True
+                break
+        
+        if not is_image:
             await message.channel.send(
                 "Please upload an image as payment proof."
             )
@@ -127,7 +137,6 @@ class OrderManagement(commands.Cog):
             
         proof_url = message.attachments[0].url
         
-        # Save proof URL and update order
         product = await self.db.get_product(order['product_id'])
         if not product:
             await message.channel.send(
@@ -153,12 +162,14 @@ class OrderManagement(commands.Cog):
             )
 
 class ReviewView(discord.ui.View):
-    def __init__(self, bot, order_id: str, product: dict, user_id: int):
+    def __init__(self, bot, order_id: str, product: dict, user_id: int, quantity: int, staff_role_ids: set):
         super().__init__(timeout=None)
         self.bot = bot
         self.order_id = order_id
         self.product = product
         self.user_id = user_id
+        self.quantity = quantity
+        self._staff_role_ids = staff_role_ids
         self.db = DatabaseManager(os.getenv('DATABASE_PATH'))
 
     @discord.ui.button(label="✅ Accept Payment",
@@ -186,7 +197,6 @@ class ReviewView(discord.ui.View):
             return
 
         try:
-            # Send deliverables to buyer
             user = self.bot.get_user(self.user_id)
             if user:
                 embed = discord.Embed(
@@ -195,11 +205,14 @@ class ReviewView(discord.ui.View):
                     color=0x8b5cf6
                 )
                 
-                # Add deliverables
-                deliverables = self.product['deliverables'].split(',')
-                formatted_deliverables = "\n".join(
-                    f"• {d.strip()}" for d in deliverables
-                )
+                deliverables_str = self.product.get('deliverables', 'Digital product')
+                if deliverables_str:
+                    deliverables = deliverables_str.split(',')
+                    formatted_deliverables = "\n".join(
+                        f"• {d.strip()}" for d in deliverables
+                    )
+                else:
+                    formatted_deliverables = "• Digital product delivery"
                 
                 embed.add_field(
                     name="Your Products",
@@ -215,7 +228,6 @@ class ReviewView(discord.ui.View):
                 
                 await user.send(embed=embed)
 
-                # Add customer role
                 guild = interaction.guild
                 member = guild.get_member(self.user_id)
                 if member:
@@ -223,7 +235,6 @@ class ReviewView(discord.ui.View):
                     if role and role not in member.roles:
                         await member.add_roles(role)
 
-            # Post public log
             public_channel = self.bot.get_channel(
                 int(os.getenv('PUBLIC_LOG_CHANNEL_ID'))
             )
@@ -234,7 +245,6 @@ class ReviewView(discord.ui.View):
                 )
                 await public_channel.send(embed=embed)
 
-            # Disable buttons
             for child in self.children:
                 child.disabled = True
             await interaction.message.edit(view=self)
@@ -265,7 +275,6 @@ class ReviewView(discord.ui.View):
             )
             return
 
-        # Show modal for rejection reason
         modal = RejectModal(self.order_id, self.user_id, self.db)
         await interaction.response.send_modal(modal)
 
@@ -313,10 +322,12 @@ class RejectModal(discord.ui.Modal):
                 )
                 await user.send(embed=embed)
 
-            # Disable buttons on original message
-            for child in interaction.message.view.children:
-                child.disabled = True
-            await interaction.message.edit(view=interaction.message.view)
+            try:
+                for child in interaction.message.view.children:
+                    child.disabled = True
+                await interaction.message.edit(view=interaction.message.view)
+            except:
+                pass
 
             await interaction.response.send_message(
                 "✅ Payment rejected and buyer notified.",

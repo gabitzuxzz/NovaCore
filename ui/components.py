@@ -2,6 +2,7 @@ import discord
 from discord import ui
 from typing import Optional, List
 import logging
+import os
 
 class CategorySelect(ui.Select):
     def __init__(self):
@@ -23,9 +24,7 @@ class CategorySelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        # Get database manager instance
-        from novacore_bot.database.db_manager import DatabaseManager
-        import os
+        from database.db_manager import DatabaseManager
         
         db = DatabaseManager(os.getenv('DATABASE_PATH'))
         products = await db.get_products_by_category(self.values[0])
@@ -34,20 +33,22 @@ class CategorySelect(ui.Select):
             return
         
         embed = discord.Embed(
-            title=f"🛍️ {self.values[0].title()} Products",
-            description="Browse our premium selection below.",
+            title=f"🛍️ {self.values[0].replace('_', ' ').title()} Products",
+            description="Browse our premium selection below. Click the **Buy** button to purchase.",
             color=0x8b5cf6
         )
         
         for product in products:
             status = "🟢 In Stock" if product['stock'] > 0 else "🔴 Out of Stock"
             embed.add_field(
-                name=f"{product['name']} | €{product['price']:.2f}",
-                value=f"```{product['description']}```\n**Status:** {status} ({product['stock']} left)",
+                name=f"**{product['name']}** - €{product['price']:.2f}",
+                value=f"{product['description'][:100]}...\n**Status:** {status} ({product['stock']} units available)",
                 inline=False
             )
+            if product.get('image_url'):
+                embed.set_thumbnail(url=product['image_url'])
         
-        embed.set_footer(text="Click 'Buy Now' below the product you want to purchase")
+        embed.set_footer(text="💡 Click 'Buy' button below to purchase your product")
         
         view = ProductView(products)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -55,7 +56,6 @@ class CategorySelect(ui.Select):
 class StockView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(CategorySelect())
 
     @ui.button(label="Show Stock", style=discord.ButtonStyle.primary, custom_id="show_stock")
     async def show_stock(self, interaction: discord.Interaction, button: ui.Button):
@@ -94,7 +94,6 @@ class BuyModal(ui.Modal):
                 )
                 return
                 
-            # Show payment method selection
             view = PaymentMethodView(self.product, quantity)
             await interaction.response.send_message(
                 "Please select your payment method:",
@@ -115,13 +114,90 @@ class PaymentMethodView(ui.View):
         self.quantity = quantity
         self.total = product['price'] * quantity
 
-    @ui.button(label="PayPal", style=discord.ButtonStyle.primary)
+    async def handle_payment_selection(self, interaction: discord.Interaction, payment_method: str):
+        from database.db_manager import DatabaseManager
+        import random
+        import string
+        from datetime import datetime
+        
+        db = DatabaseManager(os.getenv('DATABASE_PATH'))
+        
+        date = datetime.now().strftime("%Y%m%d")
+        random_chars = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        order_id = f"NC-{date}-{random_chars}"
+        
+        success = await db.create_order(
+            order_id=order_id,
+            user_id=str(interaction.user.id),
+            product_name=self.product['name'],
+            quantity=self.quantity,
+            total_price=self.total,
+            payment_method=payment_method,
+            status='pending_payment'
+        )
+        
+        if not success:
+            await interaction.response.send_message(
+                "Failed to create order. Please try again.",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="🛍️ Order Created Successfully",
+            description=f"Order ID: **{order_id}**",
+            color=0x8b5cf6
+        )
+        
+        embed.add_field(name="Product", value=self.product['name'], inline=True)
+        embed.add_field(name="Quantity", value=str(self.quantity), inline=True)
+        embed.add_field(name="Total", value=f"€{self.total:.2f}", inline=True)
+        
+        if payment_method == 'paypal':
+            embed.add_field(
+                name="💳 Payment Instructions",
+                value=f"""
+                Please send €{self.total:.2f} to:
+                **PayPal:** {os.getenv('PAYPAL_EMAIL')}
+                
+                **Important:**
+                • Send as Friends & Family
+                • Include Order ID (**{order_id}**) in notes
+                • After payment, contact staff with proof
+                """,
+                inline=False
+            )
+        else:
+            address_var = f"{payment_method.upper()}_ADDRESS"
+            address = os.getenv(address_var, "Contact staff for address")
+            
+            network_info = ""
+            if payment_method == 'usdt':
+                network_info = "\n**Network:** Tron (TRC20)"
+            
+            embed.add_field(
+                name=f"💰 {payment_method.upper()} Payment Instructions",
+                value=f"""
+                Please send €{self.total:.2f} worth of {payment_method.upper()} to:
+                **Address:** `{address}`{network_info}
+                
+                **Important:** Include Order ID (**{order_id}**) in notes
+                After payment, contact staff with proof
+                """,
+                inline=False
+            )
+        
+        embed.set_footer(text="Contact staff after payment for order completion")
+        embed.timestamp = discord.utils.utcnow()
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @ui.button(label="PayPal", style=discord.ButtonStyle.primary, emoji="💳")
     async def paypal(self, interaction: discord.Interaction, button: ui.Button):
         await self.handle_payment_selection(interaction, "paypal")
 
-    @ui.button(label="Crypto", style=discord.ButtonStyle.primary)
+    @ui.button(label="Crypto", style=discord.ButtonStyle.primary, emoji="💰")
     async def crypto(self, interaction: discord.Interaction, button: ui.Button):
-        # Show crypto selection view
         view = CryptoSelectView(self.product, self.quantity, self.total)
         await interaction.response.send_message(
             "Select cryptocurrency:",
@@ -135,6 +211,10 @@ class CryptoSelectView(ui.View):
         self.product = product
         self.quantity = quantity
         self.total = total
+
+    async def handle_payment_selection(self, interaction: discord.Interaction, payment_method: str):
+        payment_view = PaymentMethodView(self.product, self.quantity)
+        await payment_view.handle_payment_selection(interaction, payment_method)
 
     @ui.select(
         placeholder="Select cryptocurrency...",
@@ -154,7 +234,6 @@ class ProductView(ui.View):
         super().__init__(timeout=300)
         self.products = {p['name']: p for p in products}
         
-        # Add Buy Now buttons for each product
         for product in products:
             button = ui.Button(
                 label=f"Buy {product['name']}",

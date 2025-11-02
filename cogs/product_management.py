@@ -4,7 +4,7 @@ from discord.ext import commands
 import os
 import logging
 from typing import Optional
-from novacore_bot.database.db_manager import DatabaseManager
+from database.db_manager import DatabaseManager
 from datetime import datetime
 import matplotlib.pyplot as plt
 import io
@@ -26,20 +26,20 @@ class ProductManagement(commands.Cog):
         return self._owner_role_id in [r.id for r in member.roles] or \
                member.guild.owner_id == member.id
 
-    @app_commands.command(name="addstock")
+    @app_commands.command(name="addproduct")
     @app_commands.describe(
-        product="Product name",
         category="Product category",
-        deliverables="Comma-separated deliverables or file URL",
+        product="Product name",
         price="Product price in EUR",
         description="Product description",
+        deliverables="Comma-separated deliverables or file URL",
         image_url="Product image URL",
         stock="Initial stock amount"
     )
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def addstock(self, interaction: discord.Interaction, product: str,
-                      category: str, deliverables: str, price: float,
-                      description: str, image_url: str, stock: int = 0):
+    async def addproduct(self, interaction: discord.Interaction, category: str,
+                        product: str, price: float, description: str,
+                        deliverables: str, image_url: str, stock: int = 0):
         """Add or update a product in stock"""
         if not self.is_owner(interaction.user):
             await interaction.response.send_message(
@@ -71,13 +71,18 @@ class ProductManagement(commands.Cog):
 
         if success:
             embed = discord.Embed(
-                title="✅ Product Added/Updated",
-                description=f"Successfully added/updated {product}",
-                color=0x8b5cf6
+                title="✅ Product Added Successfully",
+                description=f"**{product}** has been added to the store!",
+                color=0x00ff00
             )
-            embed.add_field(name="Category", value=category, inline=True)
-            embed.add_field(name="Price", value=f"€{price:.2f}", inline=True)
-            embed.add_field(name="Stock", value=str(stock), inline=True)
+            embed.set_thumbnail(url=image_url)
+            embed.add_field(name="📁 Category", value=f"`{category.title()}`", inline=True)
+            embed.add_field(name="💰 Price", value=f"**€{price:.2f}**", inline=True)
+            embed.add_field(name="📦 Stock", value=f"`{stock}` units", inline=True)
+            embed.add_field(name="📝 Description", value=description, inline=False)
+            embed.add_field(name="🎁 Deliverables", value=deliverables, inline=False)
+            embed.set_footer(text=f"Added by {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
+            embed.timestamp = discord.utils.utcnow()
             await interaction.response.send_message(embed=embed)
         else:
             await interaction.response.send_message(
@@ -273,3 +278,57 @@ class ProductManagement(commands.Cog):
             )
 
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="vouch")
+    @app_commands.describe(
+        stars="Rating stars (1-5)",
+        description="Vouch description",
+        proof="Optional proof link (image/screenshot)"
+    )
+    @commands.cooldown(1, 60, commands.BucketType.user)
+    async def vouch(self, interaction: discord.Interaction, stars: int,
+                   description: str, proof: Optional[str] = None):
+        """Submit a vouch/review for the server"""
+        if stars < 1 or stars > 5:
+            await interaction.response.send_message(
+                "Stars must be between 1 and 5.",
+                ephemeral=True
+            )
+            return
+
+        star_display = "⭐" * stars + "☆" * (5 - stars)
+        
+        embed = discord.Embed(
+            title="✨ New Vouch Received!",
+            description=description,
+            color=0xFFD700 if stars >= 4 else 0x8b5cf6
+        )
+        
+        embed.add_field(name="Rating", value=star_display, inline=False)
+        embed.set_author(
+            name=f"{interaction.user.name}#{interaction.user.discriminator}",
+            icon_url=interaction.user.display_avatar.url
+        )
+        
+        if proof:
+            if proof.startswith('http'):
+                embed.set_image(url=proof)
+            else:
+                embed.add_field(name="Proof", value=proof, inline=False)
+        
+        embed.set_footer(text=f"User ID: {interaction.user.id}")
+        embed.timestamp = discord.utils.utcnow()
+
+        vouch_channel_id = os.getenv('PUBLIC_LOG_CHANNEL_ID')
+        if vouch_channel_id:
+            vouch_channel = interaction.guild.get_channel(int(vouch_channel_id))
+            if vouch_channel:
+                await vouch_channel.send(embed=embed)
+        
+        await interaction.response.send_message(
+            "✅ Thank you for your vouch! It has been submitted successfully.",
+            ephemeral=True
+        )
+
+async def setup(bot):
+    await bot.add_cog(ProductManagement(bot))

@@ -7,3 +7,11 @@ pillow>=10.0.0
 aiofiles>=23.2.1
 asyncio>=3.4.3
 python-dateutil>=2.8.2
+aiofiles
+aiosqlite
+discord.py
+matplotlib
+pandas
+pillow
+python-dateutil
+python-dotenv
