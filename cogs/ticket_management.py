@@ -145,17 +145,17 @@ class TicketPanelView(ui.View):
         super().__init__(timeout=None)
         self.bot = bot
     
-    @ui.button(label="Product Issue", style=discord.ButtonStyle.primary, emoji="🛍️", custom_id="ticket_product")
+    @ui.button(label="Product Issue", style=discord.ButtonStyle.primary, emoji="🧩", custom_id="ticket_product")
     async def product_issue(self, interaction: discord.Interaction, button: ui.Button):
         modal = TicketModal("Product Issue", self.bot)
         await interaction.response.send_modal(modal)
     
-    @ui.button(label="Refund Request", style=discord.ButtonStyle.danger, emoji="💰", custom_id="ticket_refund")
+    @ui.button(label="Refund Request", style=discord.ButtonStyle.success, emoji="📁", custom_id="ticket_refund")
     async def refund_request(self, interaction: discord.Interaction, button: ui.Button):
         modal = TicketModal("Refund Request", self.bot)
         await interaction.response.send_modal(modal)
     
-    @ui.button(label="Others", style=discord.ButtonStyle.secondary, emoji="📋", custom_id="ticket_other")
+    @ui.button(label="Other Support", style=discord.ButtonStyle.secondary, emoji="💬", custom_id="ticket_other")
     async def other_ticket(self, interaction: discord.Interaction, button: ui.Button):
         modal = TicketModal("Others", self.bot)
         await interaction.response.send_modal(modal)
@@ -188,15 +188,18 @@ class TicketManagement(commands.Cog):
                         pass
             
             embed = discord.Embed(
-                title="🎫 Support Ticket System",
-                description="Need help? Create a support ticket by clicking one of the buttons below.\n\n"
-                           "**🛍️ Product Issue** - Problems with your purchased product\n"
-                           "**💰 Refund Request** - Request a refund for your order\n"
-                           "**📋 Others** - General inquiries and other questions\n\n"
-                           "*A private ticket channel will be created for you.*",
-                color=0x8b5cf6
+                title="🎫 NovaCore Support",
+                description="⭐ **Welcome to Premium Support!**\n\n"
+                           "<a:ARROW:1434558184927924397> **How to get help**\n"
+                           "Select a category below that matches your issue.\n\n"
+                           "<a:ARROW:1434558184927924397> **Response Time**\n"
+                           "Our team usually responds within 24 hours.\n\n"
+                           "<a:ARROW:1434558184927924397> **Terms**\n"
+                           "By creating a ticket, you accept our Terms of Service.\n\n"
+                           "🎀 Thank you for choosing NovaCore Premium!",
+                color=0x5865F2
             )
-            embed.set_footer(text="© NovaCore • Support Team")
+            embed.set_footer(text="© NovaCore • Premium Support")
             
             view = TicketPanelView(self.bot)
             panel_message = await channel.send(embed=embed, view=view)
