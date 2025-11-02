@@ -201,25 +201,28 @@ class ReviewView(discord.ui.View):
             user = self.bot.get_user(self.user_id)
             if user:
                 embed = discord.Embed(
-                    title="✅ Order Completed",
-                    description=f"Order {self.order_id} has been completed!",
-                    color=0x8b5cf6
+                    title="🎉 Order Completed Successfully!",
+                    description=f"**Order ID:** `{self.order_id}`\n\nThank you for your purchase! Your order has been approved and completed.",
+                    color=0x00ff00
                 )
                 
                 deliverables_str = self.product.get('deliverables', '')
                 formatted_deliverables = format_deliverables(deliverables_str)
                 
                 embed.add_field(
-                    name="📦 Your Products",
+                    name="📦 What You Get",
                     value=formatted_deliverables,
                     inline=False
                 )
                 
                 embed.add_field(
-                    name="Thank You!",
-                    value="Please leave a vouch in #feedbacks",
+                    name="💬 Leave a Vouch!",
+                    value="If you're happy with your purchase, please leave a vouch in <#1434532909548572792>!\n\n**Your feedback helps us grow!** ⭐",
                     inline=False
                 )
+                
+                embed.set_footer(text="© NovaCore • Thank you for your business!", icon_url="https://i.imgur.com/OpQROuS.png")
+                embed.timestamp = discord.utils.utcnow()
                 
                 await user.send(embed=embed)
 
@@ -235,9 +238,27 @@ class ReviewView(discord.ui.View):
             )
             if public_channel:
                 embed = discord.Embed(
-                    description=f"🧾 A user has purchased {self.product['name']} x{self.quantity}",
+                    title="🛍️ New Purchase!",
+                    description=f"A customer just purchased from our store!",
                     color=0x8b5cf6
                 )
+                embed.add_field(
+                    name="📦 Product",
+                    value=f"**{self.product['name']}**",
+                    inline=True
+                )
+                embed.add_field(
+                    name="📊 Quantity",
+                    value=f"**x{self.quantity}**",
+                    inline=True
+                )
+                embed.add_field(
+                    name="💰 Value",
+                    value=f"**€{self.product['price'] * self.quantity:.2f}**",
+                    inline=True
+                )
+                embed.set_footer(text="© NovaCore • Your trusted marketplace", icon_url="https://i.imgur.com/OpQROuS.png")
+                embed.timestamp = discord.utils.utcnow()
                 await public_channel.send(embed=embed)
 
             for child in self.children:
