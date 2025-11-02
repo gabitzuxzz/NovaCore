@@ -129,11 +129,10 @@ class PaymentMethodView(ui.View):
         success = await db.create_order(
             order_id=order_id,
             user_id=str(interaction.user.id),
-            product_name=self.product['name'],
+            product_id=self.product['id'],
             quantity=self.quantity,
             total_price=self.total,
-            payment_method=payment_method,
-            status='pending_payment'
+            payment_method=payment_method
         )
         
         if not success:
@@ -219,11 +218,11 @@ class CryptoSelectView(ui.View):
     @ui.select(
         placeholder="Select cryptocurrency...",
         options=[
-            discord.SelectOption(value="btc", label="Bitcoin", emoji="₿"),
-            discord.SelectOption(value="eth", label="Ethereum", emoji="Ξ"),
-            discord.SelectOption(value="ltc", label="Litecoin", emoji="Ł"),
-            discord.SelectOption(value="usdt", label="USDT", emoji="₮"),
-            discord.SelectOption(value="sol", label="Solana", emoji="◎"),
+            discord.SelectOption(value="btc", label="Bitcoin", emoji="🪙"),
+            discord.SelectOption(value="eth", label="Ethereum", emoji="💎"),
+            discord.SelectOption(value="ltc", label="Litecoin", emoji="🔷"),
+            discord.SelectOption(value="usdt", label="USDT", emoji="💵"),
+            discord.SelectOption(value="sol", label="Solana", emoji="☀️"),
         ]
     )
     async def crypto_select(self, interaction: discord.Interaction, select: ui.Select):
