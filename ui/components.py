@@ -137,7 +137,7 @@ class PaymentMethodView(ui.View):
         
         if not success:
             await interaction.response.send_message(
-                "Failed to create order. Please try again.",
+                "❌ Failed to create order. Please try again.",
                 ephemeral=True
             )
             return
@@ -154,14 +154,14 @@ class PaymentMethodView(ui.View):
         
         if payment_method == 'paypal':
             embed.add_field(
-                name="💳 Payment Instructions",
+                name="💳 PayPal Payment Instructions",
                 value=f"""
-                Please send €{self.total:.2f} to:
+                Please send **€{self.total:.2f}** to:
                 **PayPal:** {os.getenv('PAYPAL_EMAIL')}
                 
                 **Important:**
                 • Send as Friends & Family
-                • Include Order ID (**{order_id}**) in notes
+                • Include Order ID (**{order_id}**) in the payment notes
                 • After payment, contact staff with proof
                 """,
                 inline=False
@@ -177,11 +177,12 @@ class PaymentMethodView(ui.View):
             embed.add_field(
                 name=f"💰 {payment_method.upper()} Payment Instructions",
                 value=f"""
-                Please send €{self.total:.2f} worth of {payment_method.upper()} to:
+                Please send **€{self.total:.2f}** worth of {payment_method.upper()} to:
                 **Address:** `{address}`{network_info}
                 
-                **Important:** Include Order ID (**{order_id}**) in notes
-                After payment, contact staff with proof
+                **Important:**
+                • Include Order ID (**{order_id}**) in transaction notes if possible
+                • After payment, contact staff with proof
                 """,
                 inline=False
             )
@@ -189,7 +190,17 @@ class PaymentMethodView(ui.View):
         embed.set_footer(text="Contact staff after payment for order completion")
         embed.timestamp = discord.utils.utcnow()
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        try:
+            await interaction.user.send(embed=embed)
+            await interaction.response.send_message(
+                "✅ Order created! Check your DMs for payment instructions.",
+                ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ I couldn't send you a DM. Please enable DMs from server members and try again.",
+                ephemeral=True
+            )
 
     @ui.button(label="PayPal", style=discord.ButtonStyle.primary, emoji="💳")
     async def paypal(self, interaction: discord.Interaction, button: ui.Button):

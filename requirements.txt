@@ -15,3 +15,11 @@ pandas
 pillow
 python-dateutil
 python-dotenv
+aiofiles
+aiosqlite
+discord.py
+matplotlib
+pandas
+pillow
+python-dateutil
+python-dotenv
