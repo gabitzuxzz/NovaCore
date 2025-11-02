@@ -8,6 +8,7 @@ from database.db_manager import DatabaseManager
 from datetime import datetime
 import matplotlib.pyplot as plt
 import io
+from ui.components import CategoryManagementView
 
 class ProductManagement(commands.Cog):
     def __init__(self, bot):
@@ -48,7 +49,8 @@ class ProductManagement(commands.Cog):
             )
             return
 
-        valid_categories = ["best_sold", "new", "social", "discord", "accounts", "services"]
+        categories = await self.db.get_all_categories()
+        valid_categories = [cat['value'] for cat in categories]
         if category.lower() not in valid_categories:
             categories_str = ", ".join(valid_categories)
             await interaction.response.send_message(
@@ -171,31 +173,7 @@ class ProductManagement(commands.Cog):
         await interaction.response.defer()
 
         try:
-            summary, best_sellers = await self.db.get_sales_stats(period)
-
-            # Create matplotlib chart
-            plt.figure(figsize=(10, 6))
-            plt.style.use('dark_background')
-            
-            dates = [b['date'] for b in best_sellers]
-            revenues = [b['revenue'] for b in best_sellers]
-            
-            plt.plot(dates, revenues, marker='o', color='#8b5cf6')
-            plt.title(f'Revenue Over Time ({period.title()})')
-            plt.xlabel('Date')
-            plt.ylabel('Revenue (€)')
-            plt.grid(True, alpha=0.3)
-            
-            # Rotate x-axis labels for better readability
-            plt.xticks(rotation=45)
-            
-            # Save chart
-            chart_path = os.path.join(
-                os.getenv('LOG_DIR'),
-                f'stats_{period}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
-            )
-            plt.savefig(chart_path, bbox_inches='tight', dpi=300)
-            plt.close()
+            summary, time_series = await self.db.get_sales_stats(period)
 
             # Create embed
             embed = discord.Embed(
@@ -206,32 +184,50 @@ class ProductManagement(commands.Cog):
             embed.add_field(
                 name="Summary",
                 value=f"""
-                Total Orders: {summary['total_orders']}
-                Completed Orders: {summary['completed_orders']}
-                Total Revenue: €{summary['total_revenue']:.2f}
+                Total Orders: {summary.get('total_orders', 0)}
+                Completed Orders: {summary.get('completed_orders', 0)}
+                Total Revenue: €{summary.get('total_revenue', 0):.2f}
                 """,
                 inline=False
             )
 
-            if best_sellers:
-                best_products = "\n".join(
-                    f"• {b['name']}: {b['units_sold']} sold, €{b['revenue']:.2f}"
-                    for b in best_sellers[:5]
+            if time_series and len(time_series) > 0:
+                # Create matplotlib chart
+                plt.figure(figsize=(10, 6))
+                plt.style.use('dark_background')
+                
+                dates = [t['date'] for t in time_series]
+                revenues = [t['revenue'] for t in time_series]
+                
+                plt.plot(dates, revenues, marker='o', color='#8b5cf6')
+                plt.title(f'Revenue Over Time ({period.title()})')
+                plt.xlabel('Date')
+                plt.ylabel('Revenue (€)')
+                plt.grid(True, alpha=0.3)
+                
+                # Rotate x-axis labels for better readability
+                plt.xticks(rotation=45)
+                
+                # Save chart
+                chart_path = os.path.join(
+                    os.getenv('LOG_DIR'),
+                    f'stats_{period}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
                 )
+                plt.savefig(chart_path, bbox_inches='tight', dpi=300)
+                plt.close()
+
+                # Attach chart
+                file = discord.File(chart_path, filename="stats_chart.png")
+                embed.set_image(url="attachment://stats_chart.png")
+                
+                await interaction.followup.send(embed=embed, file=file)
+            else:
                 embed.add_field(
-                    name="Best Selling Products",
-                    value=best_products or "No sales data",
+                    name="Note",
+                    value="📉 No sales data available for this period yet.",
                     inline=False
                 )
-
-            # Attach chart
-            file = discord.File(chart_path, filename="stats_chart.png")
-            embed.set_image(url="attachment://stats_chart.png")
-
-            await interaction.followup.send(
-                embed=embed,
-                file=file
-            )
+                await interaction.followup.send(embed=embed)
 
         except Exception as e:
             logging.error(f"Error generating stats: {str(e)}")
@@ -279,6 +275,39 @@ class ProductManagement(commands.Cog):
             )
 
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="edit")
+    async def edit_categories(self, interaction: discord.Interaction):
+        """Manage shop categories (add, edit, delete)"""
+        if not self.is_owner(interaction.user):
+            await interaction.response.send_message(
+                "You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+
+        categories = await self.db.get_all_categories()
+        
+        embed = discord.Embed(
+            title="📂 Category Management",
+            description="Current categories in the shop:",
+            color=0x8b5cf6
+        )
+        
+        if categories:
+            for cat in categories:
+                embed.add_field(
+                    name=f"{cat['emoji']} {cat['label']}",
+                    value=f"Value: `{cat['value']}`\nID: {cat['id']}",
+                    inline=True
+                )
+        else:
+            embed.description = "No categories found."
+        
+        embed.set_footer(text="Use the buttons below to manage categories")
+        
+        view = CategoryManagementView(self.db)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @app_commands.command(name="vouch")
     @app_commands.describe(

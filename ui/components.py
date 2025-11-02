@@ -5,15 +5,13 @@ import logging
 import os
 
 class CategorySelect(ui.Select):
-    def __init__(self):
+    def __init__(self, categories: List[dict]):
         options = [
-            discord.SelectOption(value="best_sold", label="Best Sold", emoji="🏆"),
-            discord.SelectOption(value="new", label="New", emoji="✨"),
-            discord.SelectOption(value="social", label="Social Media Boost", emoji="📱"),
-            discord.SelectOption(value="discord", label="Discord", emoji="💬"),
-            discord.SelectOption(value="accounts", label="Accounts", emoji="👤"),
-            discord.SelectOption(value="services", label="Services", emoji="🛠️")
+            discord.SelectOption(value=cat['value'], label=cat['label'], emoji=cat['emoji'])
+            for cat in categories
         ]
+        if not options:
+            options = [discord.SelectOption(value="none", label="No categories available")]
         super().__init__(
             placeholder="Select a category...",
             min_values=1,
@@ -59,8 +57,19 @@ class StockView(ui.View):
 
     @ui.button(label="Show Stock", style=discord.ButtonStyle.primary, custom_id="show_stock")
     async def show_stock(self, interaction: discord.Interaction, button: ui.Button):
+        from database.db_manager import DatabaseManager
+        db = DatabaseManager(os.getenv('DATABASE_PATH'))
+        categories = await db.get_all_categories()
+        
+        if not categories:
+            await interaction.response.send_message(
+                "❌ No categories available. Please contact an administrator.",
+                ephemeral=True
+            )
+            return
+        
         view = ui.View()
-        view.add_item(CategorySelect())
+        view.add_item(CategorySelect(categories))
         await interaction.response.send_message(
             "Please select a category below to view products:",
             view=view,
@@ -263,3 +272,220 @@ class ProductView(ui.View):
             
         modal = BuyModal(product)
         await interaction.response.send_modal(modal)
+
+class AddCategoryModal(ui.Modal):
+    def __init__(self, db):
+        super().__init__(title="Add New Category")
+        self.db = db
+        
+        self.value = ui.TextInput(
+            label="Category Value (internal ID)",
+            placeholder="e.g., gaming, software",
+            min_length=2,
+            max_length=50,
+            required=True
+        )
+        self.label = ui.TextInput(
+            label="Category Label (display name)",
+            placeholder="e.g., Gaming Products",
+            min_length=2,
+            max_length=100,
+            required=True
+        )
+        self.emoji = ui.TextInput(
+            label="Emoji",
+            placeholder="e.g., 🎮",
+            min_length=1,
+            max_length=10,
+            required=True
+        )
+        self.add_item(self.value)
+        self.add_item(self.label)
+        self.add_item(self.emoji)
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        success = await self.db.add_category(
+            self.value.value.lower().replace(' ', '_'),
+            self.label.value,
+            self.emoji.value
+        )
+        
+        if success:
+            await interaction.response.send_message(
+                f"✅ Category **{self.label.value}** added successfully!",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ Failed to add category. It might already exist.",
+                ephemeral=True
+            )
+
+class EditCategoryModal(ui.Modal):
+    def __init__(self, db, category_id: int, current_value: str, current_label: str, current_emoji: str):
+        super().__init__(title="Edit Category")
+        self.db = db
+        self.category_id = category_id
+        
+        self.value = ui.TextInput(
+            label="Category Value (internal ID)",
+            default=current_value,
+            min_length=2,
+            max_length=50,
+            required=True
+        )
+        self.label = ui.TextInput(
+            label="Category Label (display name)",
+            default=current_label,
+            min_length=2,
+            max_length=100,
+            required=True
+        )
+        self.emoji = ui.TextInput(
+            label="Emoji",
+            default=current_emoji,
+            min_length=1,
+            max_length=10,
+            required=True
+        )
+        self.add_item(self.value)
+        self.add_item(self.label)
+        self.add_item(self.emoji)
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        success = await self.db.update_category(
+            self.category_id,
+            self.value.value.lower().replace(' ', '_'),
+            self.label.value,
+            self.emoji.value
+        )
+        
+        if success:
+            await interaction.response.send_message(
+                f"✅ Category **{self.label.value}** updated successfully!",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ Failed to update category.",
+                ephemeral=True
+            )
+
+class CategoryManagementView(ui.View):
+    def __init__(self, db):
+        super().__init__(timeout=300)
+        self.db = db
+    
+    @ui.button(label="Add Category", style=discord.ButtonStyle.success, emoji="➕")
+    async def add_category(self, interaction: discord.Interaction, button: ui.Button):
+        modal = AddCategoryModal(self.db)
+        await interaction.response.send_modal(modal)
+    
+    @ui.button(label="Edit Category", style=discord.ButtonStyle.primary, emoji="✏️")
+    async def edit_category(self, interaction: discord.Interaction, button: ui.Button):
+        categories = await self.db.get_all_categories()
+        if not categories:
+            await interaction.response.send_message(
+                "❌ No categories available to edit.",
+                ephemeral=True
+            )
+            return
+        
+        view = ui.View()
+        select = ui.Select(
+            placeholder="Select a category to edit...",
+            options=[
+                discord.SelectOption(
+                    value=str(cat['id']),
+                    label=f"{cat['emoji']} {cat['label']}",
+                    description=f"Value: {cat['value']}"
+                )
+                for cat in categories
+            ]
+        )
+        
+        async def select_callback(interaction: discord.Interaction):
+            category_id = int(select.values[0])
+            category = next(cat for cat in categories if cat['id'] == category_id)
+            modal = EditCategoryModal(
+                self.db,
+                category_id,
+                category['value'],
+                category['label'],
+                category['emoji']
+            )
+            await interaction.response.send_modal(modal)
+        
+        select.callback = select_callback
+        view.add_item(select)
+        await interaction.response.send_message(
+            "Select a category to edit:",
+            view=view,
+            ephemeral=True
+        )
+    
+    @ui.button(label="Delete Category", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def delete_category(self, interaction: discord.Interaction, button: ui.Button):
+        categories = await self.db.get_all_categories()
+        if not categories:
+            await interaction.response.send_message(
+                "❌ No categories available to delete.",
+                ephemeral=True
+            )
+            return
+        
+        view = ui.View()
+        select = ui.Select(
+            placeholder="Select a category to delete...",
+            options=[
+                discord.SelectOption(
+                    value=str(cat['id']),
+                    label=f"{cat['emoji']} {cat['label']}",
+                    description=f"Value: {cat['value']}"
+                )
+                for cat in categories
+            ]
+        )
+        
+        async def select_callback(interaction: discord.Interaction):
+            category_id = int(select.values[0])
+            category = next(cat for cat in categories if cat['id'] == category_id)
+            
+            confirm_view = ui.View()
+            confirm_button = ui.Button(label="Confirm Delete", style=discord.ButtonStyle.danger)
+            cancel_button = ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
+            
+            async def confirm_callback(interaction: discord.Interaction):
+                success = await self.db.delete_category(category_id)
+                if success:
+                    await interaction.response.send_message(
+                        f"✅ Category **{category['label']}** deleted successfully!",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "❌ Failed to delete category.",
+                        ephemeral=True
+                    )
+            
+            async def cancel_callback(interaction: discord.Interaction):
+                await interaction.response.send_message("❌ Deletion cancelled.", ephemeral=True)
+            
+            confirm_button.callback = confirm_callback
+            cancel_button.callback = cancel_callback
+            confirm_view.add_item(confirm_button)
+            confirm_view.add_item(cancel_button)
+            
+            await interaction.response.send_message(
+                f"⚠️ Are you sure you want to delete **{category['label']}**?",
+                view=confirm_view,
+                ephemeral=True
+            )
+        
+        select.callback = select_callback
+        view.add_item(select)
+        await interaction.response.send_message(
+            "Select a category to delete:",
+            view=view,
+            ephemeral=True
+        )

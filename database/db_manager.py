@@ -11,6 +11,34 @@ class DatabaseManager:
     async def init_db(self):
         """Initialize database tables"""
         async with aiosqlite.connect(self.db_path) as db:
+            # Categories table
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    value TEXT UNIQUE NOT NULL,
+                    label TEXT NOT NULL,
+                    emoji TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Insert default categories if table is empty
+            cursor = await db.execute('SELECT COUNT(*) FROM categories')
+            count_row = await cursor.fetchone()
+            if count_row and count_row[0] == 0:
+                default_categories = [
+                    ("best_sold", "Best Sold", "🏆"),
+                    ("new", "New", "✨"),
+                    ("social", "Social Media Boost", "📱"),
+                    ("discord", "Discord", "💬"),
+                    ("accounts", "Accounts", "👤"),
+                    ("services", "Services", "🛠️")
+                ]
+                await db.executemany('''
+                    INSERT INTO categories (value, label, emoji)
+                    VALUES (?, ?, ?)
+                ''', default_categories)
+            
             # Products table
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS products (
@@ -27,94 +55,6 @@ class DatabaseManager:
                     is_deleted BOOLEAN DEFAULT FALSE
                 )
             ''')
-            
-            # Initialize test products
-            test_products = [
-                # Best Sold Category
-                {
-                    "name": "⭐ Premium Discord Nitro",
-                    "category": "best_sold",
-                    "description": "1 Year Discord Nitro subscription with instant delivery. Most popular choice!",
-                    "price": 49.99,
-                    "stock": 15,
-                    "image_url": "https://i.imgur.com/nitro_premium.png",
-                    "deliverables": "1x Discord Nitro Gift Link,Instructions for activation"
-                },
-                # New Category
-                {
-                    "name": "🆕 Spotify Premium Family",
-                    "category": "new",
-                    "description": "6 Months Spotify Premium Family Plan. Add up to 6 members!",
-                    "price": 29.99,
-                    "stock": 10,
-                    "image_url": "https://i.imgur.com/spotify_premium.png",
-                    "deliverables": "Account credentials,Activation guide,Support for 6 months"
-                },
-                # Social Media Boost Category
-                {
-                    "name": "📈 Instagram Growth Package",
-                    "category": "social",
-                    "description": "Premium Instagram growth package: 5000 followers, 10000 likes, 100 comments",
-                    "price": 39.99,
-                    "stock": 20,
-                    "image_url": "https://i.imgur.com/instagram_boost.png",
-                    "deliverables": "Service activation within 24h,Progress tracking link"
-                },
-                {
-                    "name": "🚀 TikTok Viral Package",
-                    "category": "social",
-                    "description": "Go viral: 100k views, 10k likes, 500 shares for your TikTok video",
-                    "price": 24.99,
-                    "stock": 25,
-                    "image_url": "https://i.imgur.com/tiktok_boost.png",
-                    "deliverables": "Service activation code,Instructions PDF"
-                },
-                # Discord Category
-                {
-                    "name": "🤖 Custom Discord Bot",
-                    "category": "discord",
-                    "description": "Custom Discord bot development with your requested features",
-                    "price": 99.99,
-                    "stock": 5,
-                    "image_url": "https://i.imgur.com/discord_bot.png",
-                    "deliverables": "Source code,Setup guide,1 month support"
-                },
-                # Accounts Category
-                {
-                    "name": "🎮 Netflix Premium 4K",
-                    "category": "accounts",
-                    "description": "Netflix Premium 4K UHD account - 1 year warranty",
-                    "price": 34.99,
-                    "stock": 30,
-                    "image_url": "https://i.imgur.com/netflix_premium.png",
-                    "deliverables": "Account credentials,Warranty information"
-                },
-                # Services Category
-                {
-                    "name": "💻 Website Development",
-                    "category": "services",
-                    "description": "Professional website development with modern design",
-                    "price": 199.99,
-                    "stock": 3,
-                    "image_url": "https://i.imgur.com/web_dev.png",
-                    "deliverables": "Website files,Domain setup,SEO optimization"
-                }
-            ]
-
-            for product in test_products:
-                await db.execute('''
-                    INSERT OR REPLACE INTO products 
-                    (name, category, description, price, stock, image_url, deliverables)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    product["name"],
-                    product["category"],
-                    product["description"],
-                    product["price"],
-                    product["stock"],
-                    product["image_url"],
-                    product["deliverables"]
-                ))
 
             # Orders table
             await db.execute('''
@@ -159,6 +99,57 @@ class DatabaseManager:
 
             await db.commit()
 
+    async def get_all_categories(self) -> List[Dict]:
+        """Get all categories"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT * FROM categories 
+                ORDER BY created_at ASC
+            ''')
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def add_category(self, value: str, label: str, emoji: str) -> bool:
+        """Add a new category"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    INSERT INTO categories (value, label, emoji)
+                    VALUES (?, ?, ?)
+                ''', (value, label, emoji))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error adding category: {str(e)}")
+            return False
+
+    async def update_category(self, category_id: int, value: str, label: str, emoji: str) -> bool:
+        """Update an existing category"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    UPDATE categories 
+                    SET value = ?, label = ?, emoji = ?
+                    WHERE id = ?
+                ''', (value, label, emoji, category_id))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error updating category: {str(e)}")
+            return False
+
+    async def delete_category(self, category_id: int) -> bool:
+        """Delete a category"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('DELETE FROM categories WHERE id = ?', (category_id,))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error deleting category: {str(e)}")
+            return False
+
     async def add_product(self, name: str, category: str, price: float, description: str,
                          image_url: str, deliverables: str, stock: int = 0) -> bool:
         """Add a new product or update existing one"""
@@ -193,6 +184,48 @@ class DatabaseManager:
             ''', (category,))
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+    async def get_all_products(self) -> List[Dict]:
+        """Get all products"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT * FROM products 
+                WHERE is_deleted = FALSE 
+                ORDER BY created_at DESC
+            ''')
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def remove_product(self, name: str) -> bool:
+        """Remove a product (soft delete)"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    UPDATE products 
+                    SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP
+                    WHERE name = ?
+                ''', (name,))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error removing product: {str(e)}")
+            return False
+
+    async def update_stock(self, name: str, amount: int) -> bool:
+        """Update stock for a product"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    UPDATE products 
+                    SET stock = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE name = ?
+                ''', (amount, name))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error updating stock: {str(e)}")
+            return False
 
     async def create_order(self, order_id: str, user_id: str, product_id: int,
                           quantity: int, total_price: float, payment_method: str) -> bool:
@@ -258,9 +291,9 @@ class DatabaseManager:
     async def get_sales_stats(self, period: str = 'all') -> Tuple[Dict, List[Dict]]:
         """Get sales statistics for the specified period"""
         date_filter = {
-            'daily': 'date = date("now")',
-            'weekly': 'date >= date("now", "-7 days")',
-            'monthly': 'date >= date("now", "-30 days")',
+            'daily': "date(o.created_at) = date('now')",
+            'weekly': "date(o.created_at) >= date('now', '-7 days')",
+            'monthly': "date(o.created_at) >= date('now', '-30 days')",
             'all': '1=1'
         }.get(period, '1=1')
 
@@ -272,29 +305,27 @@ class DatabaseManager:
                 SELECT 
                     COUNT(DISTINCT o.id) as total_orders,
                     COUNT(DISTINCT CASE WHEN o.status = 'completed' THEN o.id END) as completed_orders,
-                    SUM(CASE WHEN o.status = 'completed' THEN o.total_price END) as total_revenue
+                    COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total_price END), 0) as total_revenue
                 FROM orders o
                 WHERE {date_filter}
             ''')
-            summary = dict(await cursor.fetchone())
+            summary_row = await cursor.fetchone()
+            summary = dict(summary_row) if summary_row else {"total_orders": 0, "completed_orders": 0, "total_revenue": 0}
             
-            # Get best-selling products
+            # Get time series data for chart
             cursor = await db.execute(f'''
                 SELECT 
-                    p.name,
-                    COUNT(o.id) as orders,
-                    SUM(o.quantity) as units_sold,
-                    SUM(o.total_price) as revenue
-                FROM products p
-                JOIN orders o ON p.id = o.product_id
-                WHERE o.status = 'completed' AND {date_filter}
-                GROUP BY p.id
-                ORDER BY revenue DESC
-                LIMIT 5
+                    date(o.created_at) as date,
+                    COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total_price END), 0) as revenue
+                FROM orders o
+                WHERE {date_filter}
+                GROUP BY date(o.created_at)
+                ORDER BY date(o.created_at) ASC
             ''')
-            best_sellers = [dict(row) for row in cursor]
+            time_series = [dict(row) for row in await cursor.fetchall()]
             
-            return summary, best_sellers
+            return summary, time_series
+
     async def get_pending_order(self, user_id: str) -> Optional[Dict]:
         """Get pending order for a user"""
         async with aiosqlite.connect(self.db_path) as db:
