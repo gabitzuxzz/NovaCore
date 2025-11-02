@@ -8,15 +8,14 @@ from discord.ext import commands
 from pathlib import Path
 from ui.components import StockView
 
+# Logging simplificat, compatibil cu Render
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/novacore.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 
+# Încarcă variabilele din .env
 load_dotenv()
 
 REQUIRED_ENV_VARS = [
@@ -39,6 +38,7 @@ if missing_vars:
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='/', intents=intents)
 
+# Creează directoarele necesare
 Path(os.getenv('LOG_DIR')).mkdir(parents=True, exist_ok=True)
 Path(os.path.dirname(os.getenv('DATABASE_PATH'))).mkdir(parents=True, exist_ok=True)
 
@@ -124,4 +124,4 @@ def main():
         sys.exit(1)
 
 if __name__ == '__main__':
-    main()
+    main()i
