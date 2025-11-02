@@ -332,3 +332,16 @@ class DatabaseManager:
         except Exception as e:
             logging.error(f"Error updating order proof: {str(e)}")
             return False
+
+    async def get_order_by_id(self, order_id: str) -> Optional[Dict]:
+        """Get order details by order ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT o.*, p.name as product_name, p.category as product_category
+                FROM orders o
+                LEFT JOIN products p ON o.product_id = p.id
+                WHERE o.order_id = ?
+            ''', (order_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None

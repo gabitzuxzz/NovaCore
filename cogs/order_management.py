@@ -105,6 +105,94 @@ class OrderManagement(commands.Cog):
         view = ReviewView(self.bot, order['order_id'], product, user.id, order['quantity'], self._staff_role_ids)
         await staff_channel.send(embed=embed, view=view)
 
+    @discord.app_commands.command(name="details")
+    @discord.app_commands.describe(order_id="Order ID to view details")
+    async def details(self, interaction: discord.Interaction, order_id: str):
+        """View details of a specific order"""
+        if not self.is_staff(interaction.user):
+            await interaction.response.send_message(
+                "You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+
+        order = await self.db.get_order_by_id(order_id)
+        if not order:
+            await interaction.response.send_message(
+                f"❌ Order `{order_id}` not found.",
+                ephemeral=True
+            )
+            return
+
+        status_emoji = {
+            'pending_proof': '⏳',
+            'completed': '✅',
+            'rejected': '❌',
+            'cancelled': '🚫'
+        }.get(order['status'], '❓')
+
+        status_color = {
+            'pending_proof': 0xFFA500,
+            'completed': 0x00FF00,
+            'rejected': 0xFF0000,
+            'cancelled': 0x808080
+        }.get(order['status'], 0x8b5cf6)
+
+        embed = discord.Embed(
+            title=f"{status_emoji} Order Details",
+            description=f"**Order ID:** `{order['order_id']}`",
+            color=status_color
+        )
+
+        embed.add_field(
+            name="📦 Product",
+            value=order.get('product_name', 'Unknown'),
+            inline=True
+        )
+        embed.add_field(
+            name="📊 Quantity",
+            value=f"x{order['quantity']}",
+            inline=True
+        )
+        embed.add_field(
+            name="💰 Total",
+            value=f"€{order['total_price']:.2f}",
+            inline=True
+        )
+        embed.add_field(
+            name="💳 Payment Method",
+            value=order['payment_method'].upper(),
+            inline=True
+        )
+        embed.add_field(
+            name="📋 Status",
+            value=order['status'].replace('_', ' ').title(),
+            inline=True
+        )
+        embed.add_field(
+            name="👤 User ID",
+            value=f"`{order['user_id']}`",
+            inline=True
+        )
+        embed.add_field(
+            name="📅 Created At",
+            value=f"<t:{int(datetime.fromisoformat(order['created_at']).timestamp())}:F>",
+            inline=False
+        )
+
+        if order.get('proof_image'):
+            embed.set_image(url=order['proof_image'])
+            embed.add_field(
+                name="🖼️ Payment Proof",
+                value="See image below",
+                inline=False
+            )
+
+        embed.set_footer(text=f"Requested by {interaction.user.name}")
+        embed.timestamp = discord.utils.utcnow()
+
+        await interaction.response.send_message(embed=embed)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """Handle payment proof uploads in DMs"""

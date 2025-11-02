@@ -320,7 +320,7 @@ class ProductManagement(commands.Cog):
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         embed.timestamp = discord.utils.utcnow()
 
-        vouch_channel_id = os.getenv('PUBLIC_LOG_CHANNEL_ID')
+        vouch_channel_id = os.getenv('VOUCH_CHANNEL_ID')
         if vouch_channel_id:
             vouch_channel = interaction.guild.get_channel(int(vouch_channel_id))
             if vouch_channel:
