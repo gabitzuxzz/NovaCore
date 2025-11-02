@@ -74,9 +74,17 @@ async def on_ready():
     try:
         channel = bot.get_channel(int(os.getenv('MAIN_CHANNEL_ID')))
         if channel:
+            messages_to_delete = []
             async for message in channel.history(limit=100):
-                if message.author == bot.user and "💼 NovaCore Stock" in message.content:
-                    return
+                if message.author == bot.user:
+                    messages_to_delete.append(message)
+            
+            for message in messages_to_delete:
+                try:
+                    await message.delete()
+                    logging.info(f'Deleted old stock message: {message.id}')
+                except Exception as e:
+                    logging.error(f'Failed to delete message {message.id}: {str(e)}')
                 
             embed = discord.Embed(
                 title="💼 NovaCore Products",
@@ -93,6 +101,7 @@ async def on_ready():
             
             view = StockView()
             await channel.send(embed=embed, view=view)
+            logging.info('Stock panel posted successfully')
     except Exception as e:
         logging.error(f'Error setting up stock panel: {str(e)}')
 
