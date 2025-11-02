@@ -45,7 +45,9 @@ REQUIRED_ENV_VARS = [
     'STAFF_ROLE_IDS',
     'PAYPAL_EMAIL',
     'DATABASE_PATH',
-    'LOG_DIR'
+    'LOG_DIR',
+    'TICKET_PANEL_CHANNEL_ID',
+    'TICKET_CATEGORY_ID'
 ]
 
 missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
