@@ -24,3 +24,12 @@ pillow
 python-dateutil
 python-dotenv
 flask
+aiofiles
+aiosqlite
+discord.py
+flask
+matplotlib
+pandas
+pillow
+python-dateutil
+python-dotenv
