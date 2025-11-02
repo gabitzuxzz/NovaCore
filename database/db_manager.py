@@ -97,6 +97,17 @@ class DatabaseManager:
                 )
             ''')
 
+            # Payment methods table
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS payment_methods (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    method_name TEXT UNIQUE NOT NULL,
+                    address TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             await db.commit()
 
     async def get_all_categories(self) -> List[Dict]:
@@ -374,5 +385,57 @@ class DatabaseManager:
                 LEFT JOIN products p ON o.product_id = p.id
                 WHERE o.order_id = ?
             ''', (order_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def update_payment_info(self, method_name: str, address: str) -> bool:
+        """Add or update payment method information"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    INSERT INTO payment_methods (method_name, address)
+                    VALUES (?, ?)
+                    ON CONFLICT(method_name) DO UPDATE SET
+                        address=excluded.address,
+                        updated_at=CURRENT_TIMESTAMP
+                ''', (method_name, address))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error updating payment info: {str(e)}")
+            return False
+
+    async def get_payment_info(self, method_name: str) -> Optional[str]:
+        """Get payment address for a specific method"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT address FROM payment_methods 
+                WHERE method_name = ?
+            ''', (method_name,))
+            row = await cursor.fetchone()
+            if row:
+                return row['address']
+            return os.getenv(f"{method_name.upper()}_ADDRESS")
+
+    async def get_all_payment_info(self) -> List[Dict]:
+        """Get all payment methods"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT * FROM payment_methods 
+                ORDER BY created_at DESC
+            ''')
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_product_by_name(self, name: str) -> Optional[Dict]:
+        """Get a product by name"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute('''
+                SELECT * FROM products 
+                WHERE name = ? AND is_deleted = FALSE
+            ''', (name,))
             row = await cursor.fetchone()
             return dict(row) if row else None

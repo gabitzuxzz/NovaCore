@@ -8,7 +8,7 @@ from database.db_manager import DatabaseManager
 from datetime import datetime
 import matplotlib.pyplot as plt
 import io
-from ui.components import CategoryManagementView
+from ui.components import CategoryManagementView, ProductManagementView
 
 class ProductManagement(commands.Cog):
     def __init__(self, bot):
@@ -307,6 +307,40 @@ class ProductManagement(commands.Cog):
         embed.set_footer(text="Use the buttons below to manage categories")
         
         view = CategoryManagementView(self.db)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @app_commands.command(name="manage")
+    async def manage_products(self, interaction: discord.Interaction):
+        """Manage products (add, edit, delete)"""
+        if not self.is_owner(interaction.user):
+            await interaction.response.send_message(
+                "You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+
+        embed = discord.Embed(
+            title="🛠️ Product Management",
+            description="Choose an action to manage your products:",
+            color=0x8b5cf6
+        )
+        embed.add_field(
+            name="➕ Add Product",
+            value="Add a new product to the store",
+            inline=False
+        )
+        embed.add_field(
+            name="✏️ Edit Product",
+            value="Edit an existing product",
+            inline=False
+        )
+        embed.add_field(
+            name="🗑️ Delete Product",
+            value="Remove a product from the store",
+            inline=False
+        )
+        
+        view = ProductManagementView(self.db)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @app_commands.command(name="vouch")

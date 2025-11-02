@@ -489,3 +489,311 @@ class CategoryManagementView(ui.View):
             view=view,
             ephemeral=True
         )
+
+class ProductManagementView(ui.View):
+    def __init__(self, db):
+        super().__init__(timeout=180)
+        self.db = db
+
+    @ui.button(label="➕ Add Product", style=discord.ButtonStyle.success)
+    async def add_product(self, interaction: discord.Interaction, button: ui.Button):
+        modal = AddProductModal(self.db)
+        await interaction.response.send_modal(modal)
+
+    @ui.button(label="✏️ Edit Product", style=discord.ButtonStyle.primary)
+    async def edit_product(self, interaction: discord.Interaction, button: ui.Button):
+        products = await self.db.get_all_products()
+        if not products:
+            await interaction.response.send_message(
+                "❌ No products available to edit.",
+                ephemeral=True
+            )
+            return
+        
+        view = ui.View()
+        options = [
+            discord.SelectOption(
+                label=p['name'][:100],
+                value=p['name'],
+                description=f"€{p['price']:.2f} - {p['category']}"
+            )
+            for p in products[:25]
+        ]
+        select = ui.Select(placeholder="Select a product to edit...", options=options)
+        
+        async def select_callback(interaction: discord.Interaction):
+            product = await self.db.get_product_by_name(select.values[0])
+            if product:
+                modal = EditProductModal(self.db, product)
+                await interaction.response.send_modal(modal)
+            else:
+                await interaction.response.send_message(
+                    "❌ Product not found.",
+                    ephemeral=True
+                )
+        
+        select.callback = select_callback
+        view.add_item(select)
+        await interaction.response.send_message(
+            "Select a product to edit:",
+            view=view,
+            ephemeral=True
+        )
+
+    @ui.button(label="🗑️ Delete Product", style=discord.ButtonStyle.danger)
+    async def delete_product(self, interaction: discord.Interaction, button: ui.Button):
+        products = await self.db.get_all_products()
+        if not products:
+            await interaction.response.send_message(
+                "❌ No products available to delete.",
+                ephemeral=True
+            )
+            return
+        
+        view = ui.View()
+        options = [
+            discord.SelectOption(
+                label=p['name'][:100],
+                value=p['name'],
+                description=f"€{p['price']:.2f} - {p['category']}"
+            )
+            for p in products[:25]
+        ]
+        select = ui.Select(placeholder="Select a product to delete...", options=options)
+        
+        async def select_callback(interaction: discord.Interaction):
+            product_name = select.values[0]
+            confirm_view = ui.View()
+            confirm_button = ui.Button(label="Confirm Delete", style=discord.ButtonStyle.danger)
+            cancel_button = ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
+            
+            async def confirm_callback(interaction: discord.Interaction):
+                success = await self.db.remove_product(product_name)
+                if success:
+                    await interaction.response.send_message(
+                        f"✅ Product **{product_name}** deleted successfully!",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "❌ Failed to delete product.",
+                        ephemeral=True
+                    )
+            
+            async def cancel_callback(interaction: discord.Interaction):
+                await interaction.response.send_message("❌ Deletion cancelled.", ephemeral=True)
+            
+            confirm_button.callback = confirm_callback
+            cancel_button.callback = cancel_callback
+            confirm_view.add_item(confirm_button)
+            confirm_view.add_item(cancel_button)
+            
+            await interaction.response.send_message(
+                f"⚠️ Are you sure you want to delete **{product_name}**?",
+                view=confirm_view,
+                ephemeral=True
+            )
+        
+        select.callback = select_callback
+        view.add_item(select)
+        await interaction.response.send_message(
+            "Select a product to delete:",
+            view=view,
+            ephemeral=True
+        )
+
+class AddProductModal(ui.Modal, title="Add New Product"):
+    def __init__(self, db):
+        super().__init__()
+        self.db = db
+
+    name = ui.TextInput(
+        label="Product Name",
+        placeholder="Enter product name...",
+        required=True,
+        max_length=100
+    )
+    
+    description = ui.TextInput(
+        label="Description",
+        placeholder="Enter product description...",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=500
+    )
+    
+    price = ui.TextInput(
+        label="Price (EUR)",
+        placeholder="e.g., 9.99",
+        required=True,
+        max_length=10
+    )
+    
+    image_url = ui.TextInput(
+        label="Image URL",
+        placeholder="https://example.com/image.png",
+        required=False,
+        max_length=500
+    )
+    
+    category = ui.TextInput(
+        label="Category",
+        placeholder="e.g., best_sold, new, social, etc.",
+        required=True,
+        max_length=50
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            price_value = float(self.price.value)
+            if price_value <= 0:
+                await interaction.response.send_message(
+                    "❌ Price must be greater than 0.",
+                    ephemeral=True
+                )
+                return
+
+            categories = await self.db.get_all_categories()
+            valid_categories = [cat['value'] for cat in categories]
+            if self.category.value.lower() not in valid_categories:
+                await interaction.response.send_message(
+                    f"❌ Invalid category. Valid categories: {', '.join(valid_categories)}",
+                    ephemeral=True
+                )
+                return
+
+            success = await self.db.add_product(
+                self.name.value,
+                self.category.value.lower(),
+                price_value,
+                self.description.value,
+                self.image_url.value if self.image_url.value else "",
+                "",
+                0
+            )
+            
+            if success:
+                embed = discord.Embed(
+                    title="✅ Product Added Successfully",
+                    description=f"**{self.name.value}** has been added to the store!",
+                    color=0x00ff00
+                )
+                if self.image_url.value and self.image_url.value.startswith(('http://', 'https://')):
+                    embed.set_thumbnail(url=self.image_url.value)
+                embed.add_field(name="📁 Category", value=f"`{self.category.value}`", inline=True)
+                embed.add_field(name="💰 Price", value=f"**€{price_value:.2f}**", inline=True)
+                embed.add_field(name="📝 Description", value=self.description.value, inline=False)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    "❌ Failed to add product. Please try again.",
+                    ephemeral=True
+                )
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Invalid price format. Please enter a number.",
+                ephemeral=True
+            )
+
+class EditProductModal(ui.Modal, title="Edit Product"):
+    def __init__(self, db, product):
+        super().__init__()
+        self.db = db
+        self.product = product
+        
+        self.name.default = product['name']
+        self.description.default = product['description'] or ""
+        self.price.default = str(product['price'])
+        self.image_url.default = product['image_url'] or ""
+        self.category.default = product['category']
+
+    name = ui.TextInput(
+        label="Product Name",
+        placeholder="Enter product name...",
+        required=True,
+        max_length=100
+    )
+    
+    description = ui.TextInput(
+        label="Description",
+        placeholder="Enter product description...",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=500
+    )
+    
+    price = ui.TextInput(
+        label="Price (EUR)",
+        placeholder="e.g., 9.99",
+        required=True,
+        max_length=10
+    )
+    
+    image_url = ui.TextInput(
+        label="Image URL",
+        placeholder="https://example.com/image.png",
+        required=False,
+        max_length=500
+    )
+    
+    category = ui.TextInput(
+        label="Category",
+        placeholder="e.g., best_sold, new, social, etc.",
+        required=True,
+        max_length=50
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            price_value = float(self.price.value)
+            if price_value <= 0:
+                await interaction.response.send_message(
+                    "❌ Price must be greater than 0.",
+                    ephemeral=True
+                )
+                return
+
+            categories = await self.db.get_all_categories()
+            valid_categories = [cat['value'] for cat in categories]
+            if self.category.value.lower() not in valid_categories:
+                await interaction.response.send_message(
+                    f"❌ Invalid category. Valid categories: {', '.join(valid_categories)}",
+                    ephemeral=True
+                )
+                return
+
+            if self.product['name'] != self.name.value:
+                await self.db.remove_product(self.product['name'])
+
+            success = await self.db.add_product(
+                self.name.value,
+                self.category.value.lower(),
+                price_value,
+                self.description.value,
+                self.image_url.value if self.image_url.value else "",
+                self.product['deliverables'] or "",
+                self.product['stock']
+            )
+            
+            if success:
+                embed = discord.Embed(
+                    title="✅ Product Updated Successfully",
+                    description=f"**{self.name.value}** has been updated!",
+                    color=0x00ff00
+                )
+                if self.image_url.value and self.image_url.value.startswith(('http://', 'https://')):
+                    embed.set_thumbnail(url=self.image_url.value)
+                embed.add_field(name="📁 Category", value=f"`{self.category.value}`", inline=True)
+                embed.add_field(name="💰 Price", value=f"**€{price_value:.2f}**", inline=True)
+                embed.add_field(name="📝 Description", value=self.description.value, inline=False)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    "❌ Failed to update product. Please try again.",
+                    ephemeral=True
+                )
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Invalid price format. Please enter a number.",
+                ephemeral=True
+            )
