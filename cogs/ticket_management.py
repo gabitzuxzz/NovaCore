@@ -95,7 +95,7 @@ class TicketModal(ui.Modal):
             order = await db.get_order_by_id(self.order_id.value)
             
             if order:
-                product = await db.get_product_by_id(order['product_id'])
+                product = await db.get_product(order['product_id'])
                 status_emoji = {
                     'pending': '🟡',
                     'approved': '🟢',
